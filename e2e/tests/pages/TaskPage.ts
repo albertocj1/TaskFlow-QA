@@ -44,7 +44,17 @@ export class TaskPage {
   }
 
   async toggleTask(title: string) {
-    await this.taskByTitle(title).getByTestId("task-checkbox").click();
+    const checkbox = this.taskByTitle(title).getByTestId("task-checkbox");
+    const wasChecked = await checkbox.isChecked();
+    await checkbox.click();
+    // The checkbox is a controlled input driven by task.completed, which
+    // only flips after the PATCH + refresh round trip resolves. Wait for
+    // that instead of returning as soon as the click event fires.
+    if (wasChecked) {
+      await expect(checkbox).not.toBeChecked();
+    } else {
+      await expect(checkbox).toBeChecked();
+    }
   }
 
   async deleteTask(title: string) {
