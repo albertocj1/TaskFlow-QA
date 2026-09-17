@@ -7,6 +7,8 @@ dashboard. Built to demonstrate the skill set for automation-focused
 engineering roles (React/TypeScript, Playwright, CI/CD, AI-assisted
 development with Claude Code).
 
+![Playwright test run - 30 passed, 0 failed](test_run.png)
+
 ## Why this project exists
 
 The app itself is intentionally simple. The point isn't the task
