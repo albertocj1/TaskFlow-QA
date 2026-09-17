@@ -81,24 +81,44 @@ delete that job if you're not using Vercel).
 
 ## Where Claude Code fit into this
 
-<!--
-Fill this in as you actually work through the project. This section
-is what turns the repo into a case study instead of just a repo.
-Suggested prompts to try and document:
+While setting this project up locally, `npm test` came back with 18
+failures. Rather than just re-running until it went green, I walked
+Claude Code through diagnosing each failure category and asked it to
+find and fix the real bugs, not paper over the symptoms.
 
-- "Generate a Page Object Model class for [new page] based on this
-  component's data-testid attributes"
-- "Here's a flaky test - the timing depends on a network response.
-  Refactor it to wait on a condition instead of a fixed delay"
-- "Write API-level Playwright tests covering the edge cases for
-  this FastAPI endpoint"
-- "Review this CI workflow and suggest what's missing for a
-  production automation pipeline"
+**Bug 1: a race condition in the Page Object Model.**
+`TaskPage.toggleTask()` clicked the checkbox and returned immediately.
+But the checkbox's `data-completed` state only updates after the
+`PATCH` request and a subsequent `refresh()` resolve - a real async
+round trip. Playwright's `click()` resolves as soon as the click event
+fires, not once that chain settles, so the very next assertion could
+read stale state. Fix: `toggleTask()` now waits for the checkbox's
+checked state to actually flip via an auto-retrying `expect(...)`
+before returning, instead of a fire-and-forget click.
 
-For each one: what you asked, what Claude Code produced, what you
-changed, and what it caught or missed. That's the differentiator -
-showing judgment about the tool, not just that you used it.
--->
+**Bug 2: no isolation between parallel Playwright workers.**
+The suite already reset the backend between tests via `DELETE /tasks`
+- but that reset was global against a single shared in-memory store.
+With `fullyParallel: true` and multiple workers, one worker's reset
+(to start its next test clean) could wipe out tasks another worker was
+mid-test with, producing intermittent "empty state not found" and
+task-count-mismatch failures that only showed up under parallelism and
+passed reliably with `--workers=1`. Fix: backend storage is now
+partitioned by an `X-Test-Worker` header, and the Playwright fixtures
+attach that header to both API requests and the browser's own fetches,
+so each worker gets an isolated slice of storage while the suite stays
+genuinely parallel (requests without the header fall back to a shared
+`"default"` partition for normal, non-test use).
+
+What this demonstrates about the workflow: Claude Code didn't just
+"make the red tests green" - for each failure it distinguished
+environment/setup issues (missing browsers, PATH problems) from test
+bugs (the race condition) from architecture gaps (the isolation
+issue), and proposed the actual fix at the right layer rather than
+retrying, upping timeouts, or serializing the suite as a workaround.
+The isolation fix in particular was flagged as a judgment call - fix
+properly vs. pin to one worker - and only implemented after asking
+which tradeoff I wanted.
 
 ## Extending this into a "real" dashboard
 
